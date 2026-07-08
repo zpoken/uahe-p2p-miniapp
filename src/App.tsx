@@ -3,7 +3,7 @@ import { NavProvider, useNav } from './nav'
 import type { Route, Tab } from './nav'
 import { StoreProvider } from './store'
 import { ToastProvider } from './components'
-import { initTelegram, tg } from './telegram'
+import { initTelegram } from './telegram'
 import { Icon } from './ds'
 
 import Home from './screens/Home'
@@ -86,9 +86,9 @@ function Shell() {
 
 export default function App() {
   useEffect(() => {
-    const dark = tg?.colorScheme === 'dark'
-    document.documentElement.classList.toggle('uahe-dark', dark)
-    initTelegram(dark ? '#1a1c20' : '#ffffff')
+    // Dark theme is the default, regardless of the Telegram client theme.
+    document.documentElement.classList.add('uahe-dark')
+    initTelegram('#1a1c20')
   }, [])
 
   return (
