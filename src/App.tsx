@@ -3,7 +3,8 @@ import { NavProvider, useNav } from './nav'
 import type { Route, Tab } from './nav'
 import { StoreProvider } from './store'
 import { ToastProvider } from './components'
-import { initTelegram } from './telegram'
+import { initTelegram, tg } from './telegram'
+import { Icon } from './ds'
 
 import Home from './screens/Home'
 import Deposit from './screens/Deposit'
@@ -46,10 +47,10 @@ function RouteScreen({ route }: { route: Route }) {
 }
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'home', icon: '🏠', label: 'Головна' },
-  { id: 'market', icon: '🛍', label: 'Маркет' },
-  { id: 'history', icon: '📊', label: 'Історія' },
-  { id: 'profile', icon: '👤', label: 'Профіль' },
+  { id: 'home', icon: 'home', label: 'Головна' },
+  { id: 'market', icon: 'storefront', label: 'Маркет' },
+  { id: 'history', icon: 'receipt_long', label: 'Історія' },
+  { id: 'profile', icon: 'person', label: 'Профіль' },
 ]
 
 function Shell() {
@@ -69,16 +70,15 @@ function Shell() {
         </>
       )}
       <nav className="tabbar">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`tab ${nav.tab === t.id && !top ? 'active' : ''}`}
-            onClick={() => nav.setTab(t.id)}
-          >
-            <span className="tab-icon">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const on = nav.tab === t.id && !top
+          return (
+            <button key={t.id} className={`tab ${on ? 'active' : ''}`} onClick={() => nav.setTab(t.id)}>
+              <Icon name={t.icon} size={22} fill={on ? 1 : 0} />
+              {t.label}
+            </button>
+          )
+        })}
       </nav>
     </>
   )
@@ -86,7 +86,9 @@ function Shell() {
 
 export default function App() {
   useEffect(() => {
-    initTelegram('#0b1220')
+    const dark = tg?.colorScheme === 'dark'
+    document.documentElement.classList.toggle('uahe-dark', dark)
+    initTelegram(dark ? '#1a1c20' : '#ffffff')
   }, [])
 
   return (

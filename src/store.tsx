@@ -17,7 +17,8 @@ import type {
 } from './types'
 import { CERT_BRANDS, CHAINS, LIMITS } from './data'
 
-const LS_KEY = 'uahe_miniapp_v1'
+// v2: design-system migration renamed cert `emoji` → Material icon names
+const LS_KEY = 'uahe_miniapp_v2'
 
 export interface State {
   balance: number
@@ -99,7 +100,7 @@ function seed(): State {
         id: uid(),
         brandCode: 'ATB',
         brandTitle: 'АТБ',
-        emoji: '🛒',
+        icon: 'shopping_cart',
         color: '#0f5cbd',
         nominalUah: 500,
         priceUahe: 425,
@@ -380,7 +381,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: uid(),
         brandCode: brand.code,
         brandTitle: brand.title,
-        emoji: brand.emoji,
+        icon: brand.icon,
         color: brand.color,
         nominalUah: nominal,
         priceUahe: price,

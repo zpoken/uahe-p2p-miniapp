@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import { LIMITS, OPERATORS, OTHER_SERVICES, TICKER, fmt } from '../data'
 import { AmountInput, KV, Sheet, StatusBadge } from '../components'
 import { haptic } from '../telegram'
+import { Icon, IconTile, Segmented } from '../ds'
 import type { ServiceRequest } from '../types'
 
 // ETA logic mirrors the bot: weekday daytime 45 min, night/weekend 90 min.
@@ -19,9 +20,11 @@ function etaMinutes(): number {
 export function RequestSuccess({ req, onClose }: { req: ServiceRequest; onClose: () => void }) {
   return (
     <Sheet onClose={onClose}>
-      <div className="success-pop">📨</div>
+      <div className="success-pop">
+        <Icon name="mark_email_read" size={38} />
+      </div>
       <h3 className="center">Заявку №{req.id} створено</h3>
-      <div className="card">
+      <div className="panel">
         <KV k="Послуга" v={req.title} />
         {Object.entries(req.details).map(([k, v]) => (
           <KV key={k} k={k} v={v} />
@@ -30,8 +33,8 @@ export function RequestSuccess({ req, onClose }: { req: ServiceRequest; onClose:
         {req.feeUahe ? <KV k="Комісія" v={`${fmt(req.feeUahe)} ${TICKER}`} /> : null}
         <KV k="Статус" v={<StatusBadge status={req.status} />} />
       </div>
-      <div className="field-hint center" style={{ margin: '12px 0' }}>
-        ⏱ Орієнтовний час виконання — до {etaMinutes()} хв. Кошти буде заблоковано після прийняття
+      <div className="footnote" style={{ margin: '12px 0 16px' }}>
+        Орієнтовний час виконання — до {etaMinutes()} хв. Кошти буде заблоковано після прийняття
         заявки мерчантом.
       </div>
       <button className="btn btn-primary" onClick={onClose}>
@@ -41,16 +44,17 @@ export function RequestSuccess({ req, onClose }: { req: ServiceRequest; onClose:
   )
 }
 
-// ---------- 📱 Mobile top-up ----------
+// ---------- Mobile top-up ----------
 
 export function MobileTopup() {
   const st = useStore()
   const nav = useNav()
-  const [operator, setOperator] = useState(OPERATORS[0])
+  const [operator, setOperator] = useState(OPERATORS[0].code)
   const [phone, setPhone] = useState('')
   const [amount, setAmount] = useState('')
   const [done, setDone] = useState<ServiceRequest | null>(null)
 
+  const op = OPERATORS.find((o) => o.code === operator)!
   const phoneDigits = phone.replace(/\D/g, '')
   const phoneOk = /^0\d{9}$/.test(phoneDigits)
   const num = parseFloat(amount) || 0
@@ -59,30 +63,21 @@ export function MobileTopup() {
 
   return (
     <div className="screen">
-      <BackHeader title="Поповнення мобільного" />
+      <BackHeader title="Поповнення мобільного" gradientWord="мобільного" />
 
-      <div className="section-label">Оператор</div>
-      <div className="segmented">
-        {OPERATORS.map((o) => (
-          <button
-            key={o.code}
-            className={operator.code === o.code ? 'active' : ''}
-            onClick={() => {
-              haptic('select')
-              setOperator(o)
-            }}
-          >
-            {o.emoji} {o.title}
-          </button>
-        ))}
-      </div>
+      <span className="field-label">Оператор</span>
+      <Segmented
+        options={OPERATORS.map((o) => ({ key: o.code, label: o.title, dot: o.color }))}
+        value={operator}
+        onChange={setOperator}
+      />
 
       <div className="field">
         <label className="field-label">Номер телефону</label>
         <input
-          className={`input ${phone && !phoneOk ? 'input-error' : ''}`}
+          className={`input mono ${phone && !phoneOk ? 'input-error' : ''}`}
           inputMode="tel"
-          placeholder="0XXXXXXXXX"
+          placeholder="0XX XXX XX XX"
           maxLength={13}
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
@@ -93,8 +88,8 @@ export function MobileTopup() {
       </div>
 
       <AmountInput value={amount} onChange={setAmount} presets={[300, 500, 1000, 2000]} ticker="грн" />
-      <div className="field-hint center">
-        Від {fmt(LIMITS.mobileMin)} до {fmt(LIMITS.mobileMax)} грн · 1 грн = 1 {TICKER}
+      <div className="field-hint mono-hint center">
+        від {fmt(LIMITS.mobileMin)} до {fmt(LIMITS.mobileMax)} грн _ 1 грн = 1 {TICKER}
       </div>
 
       <div className="spacer" />
@@ -103,14 +98,14 @@ export function MobileTopup() {
         disabled={!canSubmit}
         onClick={() => {
           const req = st.createRequest('MOBILE_TOPUP', 'Поповнення мобільного', num, {
-            Оператор: operator.title,
+            Оператор: op.title,
             Телефон: phoneDigits.replace(/(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4'),
           })
           haptic('success')
           setDone(req)
         }}
       >
-        📱 Поповнити {num > 0 ? `на ${fmt(num)} грн` : ''}
+        Поповнити {num > 0 ? `на ${fmt(num)} грн` : ''}
       </button>
 
       {done && <RequestSuccess req={done} onClose={() => (setDone(null), nav.pop())} />}
@@ -118,7 +113,7 @@ export function MobileTopup() {
   )
 }
 
-// ---------- 🏦 IBAN / card transfer ----------
+// ---------- IBAN / card transfer ----------
 
 function validIban(v: string): boolean {
   return /^UA\d{27}$/.test(v.replace(/\s/g, '').toUpperCase())
@@ -187,28 +182,16 @@ export function IbanTransfer() {
 
   return (
     <div className="screen">
-      <BackHeader title="Переказ на IBAN/картку" />
+      <BackHeader title="Переказ на IBAN/картку" gradientWord="Переказ" />
 
-      <div className="segmented">
-        <button
-          className={isIban ? 'active' : ''}
-          onClick={() => {
-            haptic('select')
-            setMethod('IBAN')
-          }}
-        >
-          🏦 За IBAN
-        </button>
-        <button
-          className={!isIban ? 'active' : ''}
-          onClick={() => {
-            haptic('select')
-            setMethod('CARD')
-          }}
-        >
-          💳 За номером картки
-        </button>
-      </div>
+      <Segmented
+        options={[
+          { key: 'IBAN', label: 'За IBAN' },
+          { key: 'CARD', label: 'За номером картки' },
+        ]}
+        value={method}
+        onChange={(k) => setMethod(k as 'IBAN' | 'CARD')}
+      />
 
       {isIban ? (
         <>
@@ -222,14 +205,12 @@ export function IbanTransfer() {
               autoCapitalize="characters"
               spellCheck={false}
             />
-            {iban && !validIban(iban) && (
-              <div className="field-hint error">Формат: UA + 27 цифр</div>
-            )}
+            {iban && !validIban(iban) && <div className="field-hint error">Формат: UA + 27 цифр</div>}
           </div>
           <div className="field">
             <label className="field-label">РНОКПП (ІПН) отримувача</label>
             <input
-              className={`input ${tin && !validTin(tin) ? 'input-error' : ''}`}
+              className={`input mono ${tin && !validTin(tin) ? 'input-error' : ''}`}
               inputMode="numeric"
               placeholder="10 цифр"
               maxLength={10}
@@ -278,24 +259,20 @@ export function IbanTransfer() {
         presets={isIban ? [5000, 10000, 50000] : [1000, 5000, 10000]}
         ticker="грн"
       />
-      <div className="field-hint center">
-        Від {fmt(min)} до {fmt(max)} грн
-        {!isIban && (
-          <>
-            {' '}
-            · комісія {fmt(LIMITS.cardFee)} {TICKER} для сум до {fmt(LIMITS.cardFeeThreshold)} грн
-          </>
-        )}
+      <div className="field-hint mono-hint center">
+        від {fmt(min)} до {fmt(max)} грн
       </div>
       {fee > 0 && (
-        <div className="field-hint center" style={{ color: 'var(--amber)' }}>
-          До списання: {fmt(num + fee)} {TICKER} (включно з комісією {fmt(fee)} {TICKER})
+        <div className="warning-panel">
+          комісія {fmt(fee)} {TICKER} _ безкоштовно від {fmt(LIMITS.cardFeeThreshold)} грн
+          <br />
+          до списання: {fmt(num + fee)} {TICKER}
         </div>
       )}
 
       <div className="spacer" />
       <button className="btn btn-primary" disabled={!canSubmit} onClick={submit}>
-        🏦 Сплатити {num > 0 ? `${fmt(num)} грн` : ''}
+        Сплатити {num > 0 ? `${fmt(num)} грн` : ''}
       </button>
 
       {done && <RequestSuccess req={done} onClose={() => (setDone(null), nav.pop())} />}
@@ -303,7 +280,7 @@ export function IbanTransfer() {
   )
 }
 
-// ---------- 🧾 Bill scan ----------
+// ---------- Bill scan ----------
 
 export function BillScan() {
   const st = useStore()
@@ -319,26 +296,25 @@ export function BillScan() {
 
   return (
     <div className="screen">
-      <BackHeader title="Оплата товарів/послуг" />
-      <p className="screen-sub">
-        Завантажте фото або PDF рахунку — мерчант сплатить його, а ви отримаєте квитанцію.
-      </p>
+      <BackHeader title="Оплата товарів/послуг" gradientWord="Оплата" />
+      <p className="screen-sub">рахунок за фото _ мерчант сплачує _ ви отримуєте квитанцію</p>
 
-      <label
-        className="card center"
-        style={{ display: 'block', cursor: 'pointer', padding: preview ? 10 : 28 }}
-      >
+      <label className="dropzone">
         {preview ? (
           <img
             src={preview}
             alt="Рахунок"
-            style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 12 }}
+            style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 16 }}
           />
         ) : (
           <>
-            <div style={{ fontSize: 34, marginBottom: 8 }}>📎</div>
-            <div className="row-title">{fileName ?? 'Додати фото або PDF рахунку'}</div>
-            <div className="row-sub" style={{ marginTop: 4 }}>
+            <span className="icon-btn accent" style={{ pointerEvents: 'none' }}>
+              <Icon name="upload_file" size={24} />
+            </span>
+            <div style={{ font: '400 15px/1.3 var(--font-ui)', color: 'var(--ink)', marginTop: 12 }}>
+              {fileName ?? 'Додати фото або PDF рахунку'}
+            </div>
+            <div style={{ font: '400 13px/1.4 var(--font-ui)', color: 'var(--ink-50)', marginTop: 4 }}>
               Натисніть, щоб обрати файл
             </div>
           </>
@@ -353,8 +329,7 @@ export function BillScan() {
             setFileName(f.name)
             haptic('tap')
             if (f.type.startsWith('image/')) {
-              const url = URL.createObjectURL(f)
-              setPreview(url)
+              setPreview(URL.createObjectURL(f))
             } else {
               setPreview(null)
             }
@@ -362,14 +337,14 @@ export function BillScan() {
         />
       </label>
       {fileName && (
-        <div className="field-hint center" style={{ marginTop: 8 }}>
-          📄 {fileName}
+        <div className="field-hint mono-hint center" style={{ marginTop: 8 }}>
+          {fileName}
         </div>
       )}
 
       <AmountInput value={amount} onChange={setAmount} presets={[5000, 10000, 25000]} ticker="грн" />
-      <div className="field-hint center">
-        Від {fmt(LIMITS.billMin)} до {fmt(LIMITS.billMax)} грн
+      <div className="field-hint mono-hint center">
+        від {fmt(LIMITS.billMin)} до {fmt(LIMITS.billMax)} грн
       </div>
 
       <div className="spacer" />
@@ -384,7 +359,7 @@ export function BillScan() {
           setDone(req)
         }}
       >
-        🧾 Сплатити рахунок {num > 0 ? `на ${fmt(num)} грн` : ''}
+        Сплатити рахунок {num > 0 ? `на ${fmt(num)} грн` : ''}
       </button>
 
       {done && <RequestSuccess req={done} onClose={() => (setDone(null), nav.pop())} />}
@@ -392,7 +367,7 @@ export function BillScan() {
   )
 }
 
-// ---------- 🧩 Other services (PetrolCard, Nova Poshta COD) ----------
+// ---------- Other services (PetrolCard, Nova Poshta COD) ----------
 
 export function OtherService({ code }: { code: string }) {
   const st = useStore()
@@ -410,10 +385,17 @@ export function OtherService({ code }: { code: string }) {
     <div className="screen">
       <BackHeader title={svc.title} />
 
-      <div className="field">
+      <div className="panel" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+        <IconTile icon={svc.icon} color={svc.tile} size={48} />
+        <div style={{ font: '500 13px/1.5 var(--font-mono)', letterSpacing: 0, color: 'var(--ink-60)' }}>
+          від {fmt(svc.min)} до {fmt(svc.max)} грн _ оплата з балансу {TICKER}
+        </div>
+      </div>
+
+      <div className="field" style={{ marginTop: 16 }}>
         <label className="field-label">{svc.accountTitle}</label>
         <input
-          className="input"
+          className="input mono"
           placeholder={svc.accountPrompt}
           value={account}
           onChange={(e) => setAccount(e.target.value)}
@@ -421,9 +403,6 @@ export function OtherService({ code }: { code: string }) {
       </div>
 
       <AmountInput value={amount} onChange={setAmount} presets={[500, 1000, 2000]} ticker="грн" />
-      <div className="field-hint center">
-        Від {fmt(svc.min)} до {fmt(svc.max)} грн
-      </div>
 
       <div className="spacer" />
       <button
@@ -437,7 +416,7 @@ export function OtherService({ code }: { code: string }) {
           setDone(req)
         }}
       >
-        {svc.emoji} Сплатити {num > 0 ? `${fmt(num)} грн` : ''}
+        Сплатити {num > 0 ? `${fmt(num)} грн` : ''}
       </button>
 
       {done && <RequestSuccess req={done} onClose={() => (setDone(null), nav.pop())} />}

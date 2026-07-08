@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { haptic, supports61, tg } from './telegram'
+import { Icon } from './ds'
+import { GradTitle } from './components'
 
 export type Tab = 'home' | 'market' | 'history' | 'profile'
 
@@ -83,14 +85,16 @@ export function useNav() {
   return ctx
 }
 
-export function BackHeader({ title }: { title: string }) {
+export function BackHeader({ title, gradientWord }: { title: string; gradientWord?: string }) {
   const nav = useNav()
   return (
     <div className="subheader">
-      <button className="back-btn" onClick={nav.pop} aria-label="Назад">
-        ‹
+      <button className="icon-btn" onClick={nav.pop} aria-label="Назад">
+        <Icon name="arrow_back" size={22} />
       </button>
-      <h2>{title}</h2>
+      <h2>
+        <GradTitle title={title} word={gradientWord} />
+      </h2>
     </div>
   )
 }

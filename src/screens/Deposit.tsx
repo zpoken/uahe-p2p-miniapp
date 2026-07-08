@@ -2,73 +2,64 @@ import { useState } from 'react'
 import { BackHeader } from '../nav'
 import { CHAINS, DEPOSIT_RATES } from '../data'
 import { useStore } from '../store'
-import { useCopy, useToast } from '../components'
+import { CopyBox, KV, SectionTitle, Sheet, useToast } from '../components'
 import { haptic } from '../telegram'
+import { Icon, NetworkCard } from '../ds'
 import type { ChainCode } from '../types'
+
+const NET_MARK: Record<ChainCode, string> = { ETHEREUM: 'Ξ', BASE: 'B', TRON: 'T' }
 
 export default function Deposit() {
   const st = useStore()
-  const copy = useCopy()
   const toast = useToast()
   const [chainCode, setChainCode] = useState<ChainCode>('ETHEREUM')
+  const [qr, setQr] = useState(false)
   const chain = CHAINS.find((c) => c.code === chainCode)!
 
   return (
     <div className="screen">
-      <BackHeader title="Поповнення балансу" />
-      <p className="screen-sub">
-        Надішліть токени на вашу персональну адресу — баланс зарахується автоматично. USDT та USDC
-        конвертуються в UAHe за ринковим курсом.
-      </p>
+      <BackHeader title="Поповнення балансу" gradientWord="Поповнення" />
 
-      <div className="section-label">Мережа</div>
       <div className="network-list">
         {CHAINS.map((c) => (
-          <button
+          <NetworkCard
             key={c.code}
-            className={`network-option ${c.code === chainCode ? 'selected' : ''}`}
+            mark={NET_MARK[c.code]}
+            name={c.title}
+            sub={`${c.standard} · ${c.tokens.join(', ')}`}
+            selected={c.code === chainCode}
             onClick={() => {
               haptic('select')
               setChainCode(c.code)
             }}
-          >
-            <div className="net-logo" style={{ background: c.color }}>
-              {c.short[0]}
-            </div>
-            <div className="row-body">
-              <div className="row-title">{c.title}</div>
-              <div className="row-sub">
-                {c.standard} · {c.tokens.join(', ')}
-              </div>
-            </div>
-            <div className="radio-dot" />
-          </button>
+          />
         ))}
       </div>
 
-      <div className="section-label">Ваша адреса для поповнення</div>
-      <div className="copy-box">
-        <span className="addr">{chain.depositAddress}</span>
+      <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <CopyBox
+            label="Адреса для поповнення"
+            value={chain.depositAddress}
+            note="Адресу скопійовано"
+          />
+        </div>
         <button
           className="icon-btn"
-          onClick={() => copy(chain.depositAddress, 'Адресу скопійовано')}
-          aria-label="Копіювати адресу"
+          style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--page)', border: '1px solid var(--hairline)' }}
+          onClick={() => setQr(true)}
+          aria-label="QR-код"
         >
-          📋
+          <Icon name="qr_code_2" size={24} />
         </button>
       </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <div className="row-title" style={{ marginBottom: 6 }}>
-          Курси зарахування
-        </div>
+      <SectionTitle>Курси зарахування</SectionTitle>
+      <div className="panel">
         {chain.tokens.map((t) => (
-          <div key={t} className="kv">
-            <span className="k">• {t}</span>
-            <span className="v">{DEPOSIT_RATES[t]}</span>
-          </div>
+          <KV key={t} k={t} v={DEPOSIT_RATES[t]} />
         ))}
-        <div className="field-hint" style={{ marginTop: 8 }}>
+        <div className="field-hint" style={{ marginTop: 10 }}>
           Курс фіксується в момент зарахування депозиту в мережі {chain.title}.
         </div>
       </div>
@@ -79,14 +70,41 @@ export default function Deposit() {
         onClick={() => {
           st.simulateDeposit(chain.code, chain.tokens[0], 1000)
           haptic('success')
-          toast('Демо-депозит зараховано ✅')
+          toast('Демо-депозит зараховано')
         }}
       >
-        🎮 Демо: імітувати депозит 1 000 {chain.tokens[0]}
+        Демо: імітувати депозит 1 000 {chain.tokens[0]}
       </button>
       <div className="footnote">
-        У демо-режимі депозит зараховується миттєво. У бойовому режимі адреса видається custody-провайдером.
+        У демо-режимі депозит зараховується миттєво. У бойовому режимі адресу видає custody-провайдер.
       </div>
+
+      {qr && (
+        <Sheet title="Адреса поповнення" onClose={() => setQr(false)}>
+          <div className="center">
+            <div
+              style={{
+                width: 200,
+                height: 200,
+                margin: '0 auto 16px',
+                borderRadius: 16,
+                background: '#fff',
+                border: '1px solid var(--hairline)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(11, 1fr)',
+                padding: 14,
+                gap: 2,
+              }}
+            >
+              {Array.from({ length: 121 }).map((_, i) => {
+                const on = (i * 73 + 17) % 5 < 2 || i < 11 || i % 11 === 0
+                return <span key={i} style={{ background: on ? '#000' : 'transparent', borderRadius: 1 }} />
+              })}
+            </div>
+            <CopyBox value={chain.depositAddress} note="Адресу скопійовано" />
+          </div>
+        </Sheet>
+      )}
     </div>
   )
 }

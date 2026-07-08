@@ -1,62 +1,83 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../store'
 import { CHAINS, TICKER, fmt, fmtDate } from '../data'
 import { EmptyState, KV, Sheet, StatusBadge } from '../components'
 import { haptic } from '../telegram'
-import type { ServiceRequest } from '../types'
+import { ReceiptRow, Segmented } from '../ds'
+import type { TileColor } from '../ds'
+import type { Operation, ServiceRequest } from '../types'
 
-const KIND_ICON: Record<string, string> = {
-  DEPOSIT: '⬇️',
-  WITHDRAWAL: '⬆️',
-  TRANSFER: '💸',
-  HOLD: '🔒',
-  CAPTURE: '✅',
-  RELEASE: '🔓',
+const KIND_META: Record<string, { icon: string; tile: TileColor }> = {
+  DEPOSIT: { icon: 'south', tile: 'lime' },
+  WITHDRAWAL: { icon: 'north', tile: 'sky' },
+  TRANSFER: { icon: 'swap_horiz', tile: 'violet' },
+  HOLD: { icon: 'lock', tile: 'yellow' },
+  CAPTURE: { icon: 'check', tile: 'lime' },
+  RELEASE: { icon: 'lock_open', tile: 'lime' },
+}
+
+function dayLabel(ts: number): string {
+  const d = new Date(ts)
+  const today = new Date()
+  const yesterday = new Date(today.getTime() - 86400_000)
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  if (sameDay(d, today)) return 'сьогодні'
+  if (sameDay(d, yesterday)) return 'учора'
+  return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
 }
 
 export default function History() {
   const st = useStore()
-  const [seg, setSeg] = useState<'ops' | 'reqs' | 'wd'>('ops')
+  const [seg, setSeg] = useState('ops')
   const [openReq, setOpenReq] = useState<ServiceRequest | null>(null)
+
+  const opsByDay = useMemo(() => {
+    const groups: { day: string; rows: Operation[] }[] = []
+    for (const op of st.ops) {
+      const day = dayLabel(op.createdAt)
+      const last = groups[groups.length - 1]
+      if (last && last.day === day) last.rows.push(op)
+      else groups.push({ day, rows: [op] })
+    }
+    return groups
+  }, [st.ops])
 
   return (
     <div className="screen">
-      <div className="screen-title">📊 Історія</div>
-      <p className="screen-sub">Операції за балансом, заявки та виводи коштів.</p>
+      <div className="screen-title">Історія</div>
+      <p className="screen-sub">операції _ заявки _ виводи</p>
 
-      <div className="segmented">
-        <button className={seg === 'ops' ? 'active' : ''} onClick={() => (haptic('select'), setSeg('ops'))}>
-          Операції
-        </button>
-        <button className={seg === 'reqs' ? 'active' : ''} onClick={() => (haptic('select'), setSeg('reqs'))}>
-          Заявки
-        </button>
-        <button className={seg === 'wd' ? 'active' : ''} onClick={() => (haptic('select'), setSeg('wd'))}>
-          Виводи
-        </button>
-      </div>
+      <Segmented
+        options={[
+          { key: 'ops', label: 'Операції' },
+          { key: 'reqs', label: 'Заявки' },
+          { key: 'wd', label: 'Виводи' },
+        ]}
+        value={seg}
+        onChange={setSeg}
+      />
 
       {seg === 'ops' && (
         <>
-          {st.ops.length === 0 && <EmptyState emoji="🧮" title="Операцій ще немає" />}
-          {st.ops.map((op) => (
-            <div key={op.id} className="row">
-              <div className={`row-icon ${op.amount >= 0 ? 'tint-green' : 'tint-blue'}`}>
-                {KIND_ICON[op.kind] ?? '•'}
-              </div>
-              <div className="row-body">
-                <div className="row-title">{op.title}</div>
-                <div className="row-sub">{fmtDate(op.createdAt)}</div>
-              </div>
-              {op.amount !== 0 && (
-                <div className="row-end">
-                  <div className={`row-amount ${op.amount >= 0 ? 'pos' : 'neg'}`}>
-                    {op.amount >= 0 ? '+' : ''}
-                    {fmt(op.amount)}
-                  </div>
-                  <div className="row-caption">{TICKER}</div>
-                </div>
-              )}
+          {st.ops.length === 0 && <EmptyState title="Операцій ще немає" />}
+          {opsByDay.map((g) => (
+            <div key={g.day + g.rows[0]?.id}>
+              <div className="day-header">{g.day}</div>
+              {g.rows.map((op) => {
+                const meta = KIND_META[op.kind] ?? KIND_META.TRANSFER
+                return (
+                  <ReceiptRow
+                    key={op.id}
+                    icon={meta.icon}
+                    tileColor={meta.tile}
+                    label={op.title}
+                    subline={fmtDate(op.createdAt)}
+                    amount={op.amount === 0 ? undefined : fmt(op.amount)}
+                    positive={op.amount > 0}
+                  />
+                )
+              })}
             </div>
           ))}
         </>
@@ -65,24 +86,19 @@ export default function History() {
       {seg === 'reqs' && (
         <>
           {st.requests.length === 0 && (
-            <EmptyState emoji="📨" title="Заявок ще немає" sub="Створіть заявку на головному екрані" />
+            <EmptyState title="Заявок ще немає" sub="Створіть заявку на головному екрані" />
           )}
           {st.requests.map((r) => (
-            <button key={r.id} className="row" onClick={() => setOpenReq(r)}>
-              <div className="row-icon tint-gold">📨</div>
-              <div className="row-body">
-                <div className="row-title">
-                  #{r.id} · {r.title}
-                </div>
-                <div className="row-sub">{fmtDate(r.createdAt)}</div>
-              </div>
-              <div className="row-end">
-                <div className="row-amount neg">{fmt(r.amountUah)} грн</div>
-                <div className="row-caption">
-                  <StatusBadge status={r.status} />
-                </div>
-              </div>
-            </button>
+            <ReceiptRow
+              key={r.id}
+              icon="mark_email_unread"
+              tileColor="orange"
+              label={`№${r.id} · ${r.title}`}
+              subline={fmtDate(r.createdAt)}
+              amount={`${fmt(r.amountUah)} грн`}
+              badge={<StatusBadge status={r.status} />}
+              onClick={() => setOpenReq(r)}
+            />
           ))}
         </>
       )}
@@ -90,35 +106,25 @@ export default function History() {
       {seg === 'wd' && (
         <>
           {st.withdrawals.length === 0 && (
-            <EmptyState emoji="⛓" title="Виводів ще немає" sub="Вивід доступний з головного екрана" />
+            <EmptyState title="Виводів ще немає" sub="Вивід доступний з головного екрана" />
           )}
           {st.withdrawals.map((w) => (
-            <div key={w.id} className="row">
-              <div className="row-icon tint-blue">⬆️</div>
-              <div className="row-body">
-                <div className="row-title">
-                  {CHAINS.find((c) => c.code === w.chain)?.title ?? w.chain} ·{' '}
-                  <span className="mono">{w.to.slice(0, 8)}…</span>
-                </div>
-                <div className="row-sub">
-                  {fmtDate(w.createdAt)}
-                  {w.txHash ? ` · tx ${w.txHash.slice(0, 10)}…` : ''}
-                </div>
-              </div>
-              <div className="row-end">
-                <div className="row-amount neg">−{fmt(w.amount + w.fee)}</div>
-                <div className="row-caption">
-                  <StatusBadge status={w.status} />
-                </div>
-              </div>
-            </div>
+            <ReceiptRow
+              key={w.id}
+              icon="north"
+              tileColor="sky"
+              label={`${CHAINS.find((c) => c.code === w.chain)?.title ?? w.chain} · ${w.to.slice(0, 6)}…${w.to.slice(-4)}`}
+              subline={`${fmtDate(w.createdAt)}${w.txHash ? ` · ${w.txHash.slice(0, 10)}…` : ''}`}
+              amount={`−${fmt(w.amount + w.fee)}`}
+              badge={<StatusBadge status={w.status} />}
+            />
           ))}
         </>
       )}
 
       {openReq && (
         <Sheet title={`Заявка №${openReq.id}`} onClose={() => setOpenReq(null)}>
-          <div className="card">
+          <div className="panel">
             <KV k="Послуга" v={openReq.title} />
             {Object.entries(openReq.details).map(([k, v]) => (
               <KV key={k} k={k} v={v} />
@@ -140,7 +146,7 @@ export default function History() {
                   setOpenReq(null)
                 }}
               >
-                ❌ Скасувати заявку
+                Скасувати заявку
               </button>
             </>
           )}

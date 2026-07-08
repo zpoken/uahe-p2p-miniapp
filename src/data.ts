@@ -49,9 +49,9 @@ export const DEPOSIT_RATES: Record<string, string> = {
 }
 
 export const OPERATORS = [
-  { code: 'KYIVSTAR', title: 'Київстар', color: '#00a1e0', emoji: '⭐️' },
-  { code: 'VODAFONE', title: 'Vodafone', color: '#e60000', emoji: '🔴' },
-  { code: 'LIFECELL', title: 'lifecell', color: '#f5c518', emoji: '🟡' },
+  { code: 'KYIVSTAR', title: 'Київстар', color: '#00a1e0' },
+  { code: 'VODAFONE', title: 'Vodafone', color: '#e60000' },
+  { code: 'LIFECELL', title: 'lifecell', color: '#f5c518' },
 ]
 
 export const LIMITS = {
@@ -75,7 +75,8 @@ export const OTHER_SERVICES = [
   {
     code: 'PETROLCARD',
     title: 'Поповнити PetrolCard',
-    emoji: '⛽️',
+    icon: 'local_gas_station',
+    tile: 'yellow' as const,
     accountTitle: 'Номер картки PetrolCard',
     accountPrompt: 'Введіть номер картки (наприклад 7 800 123…)',
     min: 300,
@@ -84,7 +85,8 @@ export const OTHER_SERVICES = [
   {
     code: 'NOVAPOST',
     title: 'Післяоплата НоваПошта',
-    emoji: '📦',
+    icon: 'package_2',
+    tile: 'sky' as const,
     accountTitle: 'Номер накладної',
     accountPrompt: 'Введіть номер експрес-накладної (20 45…)',
     min: 100,
@@ -96,7 +98,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'ATB',
     title: 'АТБ',
-    emoji: '🛒',
+    icon: 'shopping_cart',
     color: '#0f5cbd',
     discountPct: 15,
     description:
@@ -106,7 +108,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'SILPO',
     title: 'Сільпо',
-    emoji: '🍏',
+    icon: 'nutrition',
     color: '#f26522',
     discountPct: 12,
     description: 'Сертифікат приймається на касах мережі «Сільпо» по всій Україні.',
@@ -115,7 +117,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'FOXTROT',
     title: 'Фокстрот',
-    emoji: '📺',
+    icon: 'tv',
     color: '#e31e24',
     discountPct: 10,
     activationKeyName: 'PIN-код',
@@ -126,7 +128,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'ROZETKA',
     title: 'Rozetka',
-    emoji: '🍎',
+    icon: 'devices',
     color: '#00a046',
     discountPct: 8,
     activationKeyName: 'Код активації',
@@ -136,7 +138,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'WOG',
     title: 'WOG',
-    emoji: '⛽️',
+    icon: 'local_gas_station',
     color: '#7ac143',
     discountPct: 9,
     description: 'Пред’явіть штрихкод касиру на будь-якому АЗК WOG. Діє на пальне та товари кафе.',
@@ -145,7 +147,7 @@ export const CERT_BRANDS: CertBrand[] = [
   {
     code: 'EVA',
     title: 'EVA',
-    emoji: '💄',
+    icon: 'spa',
     color: '#e6007e',
     discountPct: 11,
     description: 'Сертифікат приймається в усіх магазинах EVA та на eva.ua.',

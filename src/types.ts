@@ -54,7 +54,7 @@ export interface ServiceRequest {
 export interface CertBrand {
   code: string
   title: string
-  emoji: string
+  icon: string
   color: string
   discountPct: number
   description: string
@@ -66,7 +66,7 @@ export interface OwnedCert {
   id: string
   brandCode: string
   brandTitle: string
-  emoji: string
+  icon: string
   color: string
   nominalUah: number
   priceUahe: number

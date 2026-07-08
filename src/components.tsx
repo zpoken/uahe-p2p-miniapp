@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { haptic } from './telegram'
-import { TICKER, fmt } from './data'
+import { fmt } from './data'
+import { Icon, WaveArt } from './ds'
 
 // ---------- toast ----------
 
@@ -80,7 +81,7 @@ export function AmountInput({
   value,
   onChange,
   presets,
-  ticker = TICKER,
+  ticker = 'UAHe',
   autoFocus,
 }: {
   value: string
@@ -90,9 +91,7 @@ export function AmountInput({
   autoFocus?: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
-
-  // grow the input with its content
-  const width = Math.max(1, value.length) * 26 + 14
+  const width = Math.max(1, value.length) * 29 + 14
 
   return (
     <div>
@@ -118,7 +117,7 @@ export function AmountInput({
           {presets.map((p) => (
             <button
               key={p}
-              className={`preset-chip ${value === String(p) ? 'active' : ''}`}
+              className={`chip ${value === String(p) ? 'active' : ''}`}
               onClick={() => {
                 haptic('select')
                 onChange(String(p))
@@ -135,86 +134,43 @@ export function AmountInput({
 
 // ---------- status badge ----------
 
-const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: 'Очікує', cls: 'badge-amber' },
-  ACCEPTED: { label: 'В роботі', cls: 'badge-blue' },
-  CONFIRMED: { label: 'Виконано', cls: 'badge-green' },
-  DECLINED: { label: 'Відхилено', cls: 'badge-red' },
-  CANCELED: { label: 'Скасовано', cls: 'badge-gray' },
-  CREATED: { label: 'Активний', cls: 'badge-blue' },
-  CLAIMED: { label: 'Активовано', cls: 'badge-green' },
-  EXPIRED: { label: 'Прострочено', cls: 'badge-gray' },
-  AUTO_APPROVED: { label: 'Схвалено', cls: 'badge-blue' },
-  NEEDS_ADMIN: { label: 'На перевірці', cls: 'badge-amber' },
-  APPROVED: { label: 'Схвалено', cls: 'badge-blue' },
-  BROADCASTED: { label: 'В мережі', cls: 'badge-blue' },
-  MINED: { label: 'Виконано', cls: 'badge-green' },
-  FAILED: { label: 'Помилка', cls: 'badge-red' },
+const STATUS_MAP: Record<string, { label: string; tone: string }> = {
+  PENDING: { label: 'Очікує', tone: 'yellow' },
+  ACCEPTED: { label: 'В роботі', tone: 'sky' },
+  CONFIRMED: { label: 'Виконано', tone: 'green' },
+  DECLINED: { label: 'Відхилено', tone: 'red' },
+  CANCELED: { label: 'Скасовано', tone: 'muted' },
+  CREATED: { label: 'Активний', tone: 'chartreuse' },
+  CLAIMED: { label: 'Активовано', tone: 'green' },
+  EXPIRED: { label: 'Прострочено', tone: 'muted' },
+  AUTO_APPROVED: { label: 'Схвалено', tone: 'sky' },
+  NEEDS_ADMIN: { label: 'На перевірці', tone: 'yellow' },
+  APPROVED: { label: 'Схвалено', tone: 'sky' },
+  BROADCASTED: { label: 'В мережі', tone: 'sky' },
+  MINED: { label: 'Виконано', tone: 'green' },
+  FAILED: { label: 'Помилка', tone: 'red' },
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status] ?? { label: status, cls: 'badge-gray' }
-  return <span className={`badge ${s.cls}`}>{s.label}</span>
+  const s = STATUS_MAP[status] ?? { label: status, tone: 'muted' }
+  return <span className={`badge ${s.tone}`}>{s.label}</span>
 }
 
 // ---------- empty state ----------
 
-export function EmptyState({ emoji, title, sub }: { emoji: string; title: string; sub?: string }) {
+export function EmptyState({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="empty-state">
-      <div className="es-emoji">{emoji}</div>
+      <div style={{ position: 'relative', height: 60 }}>
+        <WaveArt style={{ left: '50%', top: 0, width: 280, height: 100, transform: 'translateX(-50%)' }} />
+      </div>
       <div className="es-title">{title}</div>
-      {sub && <div style={{ fontSize: 13 }}>{sub}</div>}
+      {sub && <div className="es-sub">{sub}</div>}
     </div>
   )
 }
 
-// ---------- decorative barcode (deterministic from a string) ----------
-
-export function Barcode({ value, height = 58 }: { value: string; height?: number }) {
-  const bars = useMemo(() => {
-    // deterministic pseudo-random bar widths from the value
-    let h = 2166136261
-    for (const ch of value) {
-      h ^= ch.charCodeAt(0)
-      h = Math.imul(h, 16777619)
-    }
-    const rnd = () => {
-      h ^= h << 13
-      h ^= h >>> 17
-      h ^= h << 5
-      return (h >>> 0) / 4294967295
-    }
-    const out: { x: number; w: number }[] = []
-    let x = 0
-    // guard bars
-    out.push({ x, w: 2 })
-    x += 4
-    while (x < 216) {
-      const w = 1 + Math.floor(rnd() * 3)
-      out.push({ x, w })
-      x += w + 1 + Math.floor(rnd() * 3)
-    }
-    out.push({ x: 218, w: 2 })
-    return out
-  }, [value])
-
-  return (
-    <svg
-      className="barcode"
-      width="220"
-      height={height}
-      viewBox={`0 0 220 ${height}`}
-      aria-label={value}
-    >
-      {bars.map((b, i) => (
-        <rect key={i} x={b.x} y={0} width={b.w} height={height} fill="#10192b" />
-      ))}
-    </svg>
-  )
-}
-
-// ---------- key-value row ----------
+// ---------- key-value mono row ----------
 
 export function KV({ k, v }: { k: string; v: ReactNode }) {
   return (
@@ -222,5 +178,59 @@ export function KV({ k, v }: { k: string; v: ReactNode }) {
       <span className="k">{k}</span>
       <span className="v">{v}</span>
     </div>
+  )
+}
+
+// ---------- copy field ----------
+
+export function CopyBox({ value, note, label }: { value: string; note?: string; label?: string }) {
+  const copy = useCopy()
+  return (
+    <div>
+      {label && <span className="field-label">{label}</span>}
+      <div className="copy-box">
+        <span className="addr">{value}</span>
+        <button className="icon-btn" onClick={() => copy(value, note)} aria-label="Копіювати">
+          <Icon name="content_copy" size={20} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- section title ----------
+
+export function SectionTitle({
+  children,
+  action,
+  onAction,
+}: {
+  children: ReactNode
+  action?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="section-title">
+      <h2>{children}</h2>
+      {action && (
+        <button className="st-action" onClick={onAction}>
+          {action}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ---------- gradient word title helper ----------
+
+export function GradTitle({ title, word }: { title: string; word?: string }) {
+  if (!word || !title.includes(word)) return <>{title}</>
+  const [before, after] = title.split(word)
+  return (
+    <>
+      {before}
+      <span className="grad-word">{word}</span>
+      {after}
+    </>
   )
 }

@@ -1,8 +1,9 @@
 import { BackHeader, useNav } from '../nav'
 import { useStore } from '../store'
 import { BOT_USERNAME, LIMITS, REF_RULES, SITE_URL, SUPPORT_BOT, TICKER, fmt } from '../data'
-import { KV, useCopy } from '../components'
+import { CopyBox, GradTitle, KV, SectionTitle } from '../components'
 import { openTgLink, tg, tgUser } from '../telegram'
+import { Icon, ReceiptRow, WaveArt } from '../ds'
 
 export function Profile() {
   const st = useStore()
@@ -12,67 +13,72 @@ export function Profile() {
 
   return (
     <div className="screen">
-      <div className="screen-title">👤 Профіль</div>
-      <p className="screen-sub">Акаунт, ліміти та підтримка.</p>
+      <div className="screen-title">Профіль</div>
+      <p className="screen-sub">акаунт _ ліміти _ підтримка</p>
 
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div className="avatar" style={{ width: 54, height: 54, fontSize: 21 }}>
+      <div className="panel" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span className="avatar" style={{ width: 54, height: 54, fontSize: 21 }}>
           {user?.photo_url ? <img src={user.photo_url} alt="" /> : name[0]?.toUpperCase()}
-        </div>
-        <div>
-          <div className="row-title" style={{ fontSize: 17 }}>
-            {name}
-          </div>
-          <div className="row-sub">
-            {user?.username ? `@${user.username}` : 'Telegram'}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ font: '400 17px/1.2 var(--font-ui)', color: 'var(--ink-deep)' }}>{name}</div>
+          <div className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-60)', marginTop: 4 }}>
+            {user?.username ? `@${user.username}` : 'telegram'}
             {user?.id ? ` · ID ${user.id}` : ''}
           </div>
         </div>
       </div>
 
-      <button className="row" style={{ marginTop: 12 }} onClick={() => nav.push({ name: 'referral' })}>
-        <div className="row-icon tint-gold">🤝</div>
-        <div className="row-body">
-          <div className="row-title">Запросити друга</div>
-          <div className="row-sub">Бонуси до 2% з кожної покупки друзів</div>
-        </div>
-        <div className="chevron">›</div>
-      </button>
+      <div className="spacer" />
+      <ReceiptRow
+        plain
+        icon="group_add"
+        tileColor="lime"
+        label="Запросити друга"
+        subline="Бонуси до 2% з кожної покупки друзів"
+        chevron
+        onClick={() => nav.push({ name: 'referral' })}
+      />
+      <ReceiptRow
+        plain
+        icon="confirmation_number"
+        tileColor="violet"
+        label="Мої сертифікати"
+        subline={`${st.certs.length} придбано`}
+        chevron
+        onClick={() => nav.push({ name: 'my-certs' })}
+      />
 
-      <button className="row" onClick={() => nav.push({ name: 'my-certs' })}>
-        <div className="row-icon tint-purple">🎫</div>
-        <div className="row-body">
-          <div className="row-title">Мої сертифікати</div>
-          <div className="row-sub">{st.certs.length} придбано</div>
-        </div>
-        <div className="chevron">›</div>
-      </button>
-
-      <div className="section-label">Ліміти</div>
-      <div className="card">
-        <KV k="Вивід на добу" v={`${fmt(LIMITS.withdrawDailyAmount)} ${TICKER} · ${LIMITS.withdrawDailyCount} заявок`} />
+      <SectionTitle>Ліміти</SectionTitle>
+      <div className="panel">
+        <KV
+          k="Вивід на добу"
+          v={`${fmt(LIMITS.withdrawDailyAmount)} ${TICKER} · ${LIMITS.withdrawDailyCount} заявок`}
+        />
         <KV k="Поповнення мобільного" v={`${fmt(LIMITS.mobileMin)} – ${fmt(LIMITS.mobileMax)} грн`} />
         <KV k="Переказ на IBAN" v={`${fmt(LIMITS.ibanMin)} – ${fmt(LIMITS.ibanMax)} грн`} />
         <KV k="Оплата рахунків" v={`${fmt(LIMITS.billMin)} – ${fmt(LIMITS.billMax)} грн`} />
       </div>
 
-      <div className="section-label">Підтримка</div>
-      <button className="row" onClick={() => openTgLink(`https://t.me/${SUPPORT_BOT}`)}>
-        <div className="row-icon tint-blue">🛟</div>
-        <div className="row-body">
-          <div className="row-title">Звʼязатися з підтримкою</div>
-          <div className="row-sub">@{SUPPORT_BOT}</div>
-        </div>
-        <div className="chevron">›</div>
-      </button>
-      <button className="row" onClick={() => (tg?.openLink ? tg.openLink(SITE_URL) : window.open(SITE_URL))}>
-        <div className="row-icon tint-green">🌐</div>
-        <div className="row-body">
-          <div className="row-title">Про UAHe</div>
-          <div className="row-sub">uahe.io — стейблкоїн гривні</div>
-        </div>
-        <div className="chevron">›</div>
-      </button>
+      <SectionTitle>Підтримка</SectionTitle>
+      <ReceiptRow
+        plain
+        icon="support_agent"
+        tileColor="sky"
+        label="Звʼязатися з підтримкою"
+        subline={`@${SUPPORT_BOT}`}
+        chevron
+        onClick={() => openTgLink(`https://t.me/${SUPPORT_BOT}`)}
+      />
+      <ReceiptRow
+        plain
+        icon="language"
+        tileColor="lime"
+        label="Про UAHe"
+        subline="uahe.io — стейблкоїн гривні"
+        chevron
+        onClick={() => (tg?.openLink ? tg.openLink(SITE_URL) : window.open(SITE_URL))}
+      />
 
       <div className="spacer" />
       <button
@@ -81,12 +87,13 @@ export function Profile() {
           if (window.confirm('Скинути демо-дані до початкового стану?')) st.resetDemo()
         }}
       >
-        🔄 Скинути демо-дані
+        <Icon name="restart_alt" size={19} />
+        Скинути демо-дані
       </button>
-      <div className="footnote">
-        UAHe P2P Market · демо-версія miniapp
+      <div className="tagline" style={{ marginTop: 18 }}>
+        uahe p2p market _ демо-версія
         <br />
-        Дані зберігаються локально на вашому пристрої
+        дані зберігаються локально
       </div>
     </div>
   )
@@ -94,12 +101,11 @@ export function Profile() {
 
 export function Referral() {
   const st = useStore()
-  const copy = useCopy()
   const user = tgUser()
   const refCode = `ref_${(user?.id ?? 42).toString(36).toUpperCase()}X7Q`
   const link = `https://t.me/${BOT_USERNAME}?start=${refCode}`
   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
-    '💰 Оплачуй мобільний, рахунки та купуй сертифікати зі знижкою в UAHe P2P Market!',
+    'Оплачуйте мобільний, рахунки та купуйте сертифікати зі знижкою в UAHe P2P Market',
   )}`
 
   return (
@@ -107,12 +113,12 @@ export function Referral() {
       <BackHeader title="Запросити друга" />
 
       <div className="ref-hero">
-        <div className="ref-emoji">🤝</div>
-        <h3>Запрошуйте друзів — отримуйте {TICKER}</h3>
-        <p>
-          Бонуси нараховуються з кожної покупки запрошених друзів і виплачуються щомісяця — без
-          обмежень у часі.
-        </p>
+        <WaveArt style={{ top: -8, left: -30, width: 300, height: 110 }} />
+        <WaveArt style={{ bottom: -40, right: -50, width: 280, height: 110, transform: 'scaleX(-1)' }} />
+        <h3>
+          <GradTitle title="Запрошуйте друзів — заробляйте UAHe" word="заробляйте" />
+        </h3>
+        <p>Бонуси з кожної покупки запрошених друзів, виплати щомісяця — без обмежень у часі.</p>
       </div>
 
       <div className="ref-stats">
@@ -130,28 +136,23 @@ export function Referral() {
         </div>
       </div>
 
-      <div className="section-label">Ваші відсотки</div>
-      <div className="card">
+      <SectionTitle>Ваші відсотки</SectionTitle>
+      <div className="panel">
         {REF_RULES.map((r) => (
-          <KV key={r.label} k={r.label} v={<b style={{ color: 'var(--uahe-gold)' }}>{r.pct}</b>} />
+          <KV key={r.label} k={r.label} v={<b style={{ color: 'var(--green-accent)' }}>{r.pct}</b>} />
         ))}
-        <div className="field-hint" style={{ marginTop: 8 }}>
-          Виплата — кожен другий понеділок місяця, від 250 {TICKER}. До 2 500 {TICKER} з одного
-          друга.
+        <div className="field-hint mono-hint" style={{ marginTop: 10 }}>
+          виплата — кожен 2-й понеділок _ від 250 uahe _ до 2 500 uahe з одного друга
         </div>
       </div>
 
-      <div className="section-label">Ваше посилання</div>
-      <div className="copy-box">
-        <span className="addr">{link}</span>
-        <button className="icon-btn" onClick={() => copy(link, 'Посилання скопійовано')} aria-label="Копіювати">
-          📋
-        </button>
-      </div>
+      <div className="spacer" />
+      <CopyBox label="Ваше посилання" value={link} note="Посилання скопійовано" />
 
       <div className="spacer" />
-      <button className="btn btn-gold" onClick={() => openTgLink(shareUrl)}>
-        📤 Поділитися посиланням
+      <button className="btn btn-accent" onClick={() => openTgLink(shareUrl)}>
+        <Icon name="share" size={19} />
+        Поділитися посиланням
       </button>
       <div className="footnote">
         Додайте до посилання «__тег» для відстеження каналу — наприклад {refCode}__insta
