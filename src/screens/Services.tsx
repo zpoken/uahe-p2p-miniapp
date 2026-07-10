@@ -3,7 +3,8 @@ import { BackHeader, useNav } from '../nav'
 import { useStore } from '../store'
 import { LIMITS, OPERATORS, OTHER_SERVICES, TICKER, fmt } from '../data'
 import { AmountInput, KV, Sheet, StatusBadge } from '../components'
-import { haptic } from '../telegram'
+import { haptic, openTgLink, showError } from '../telegram'
+import { BOT_USERNAME } from '../data'
 import { Icon, IconTile, Segmented } from '../ds'
 import type { ServiceRequest } from '../types'
 
@@ -96,13 +97,15 @@ export function MobileTopup() {
       <button
         className="btn btn-primary"
         disabled={!canSubmit}
-        onClick={() => {
-          const req = st.createRequest('MOBILE_TOPUP', 'Поповнення мобільного', num, {
-            Оператор: op.title,
-            Телефон: phoneDigits.replace(/(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4'),
-          })
-          haptic('success')
-          setDone(req)
+        onClick={async () => {
+          try {
+            const req = await st.createMobileRequest(op.code, phoneDigits, num)
+            haptic('success')
+            setDone(req)
+          } catch (e) {
+            haptic('error')
+            showError(e instanceof Error ? e.message : String(e))
+          }
         }}
       >
         Поповнити {num > 0 ? `на ${fmt(num)} грн` : ''}
@@ -161,23 +164,23 @@ export function IbanTransfer() {
   const amountOk = num >= min && num <= max
   const canSubmit = fieldsOk && amountOk && num + fee <= st.balance
 
-  const submit = () => {
-    const details: Record<string, string> = isIban
-      ? {
-          IBAN: iban.replace(/\s/g, '').toUpperCase(),
-          'РНОКПП (ІПН)': tin,
-          Отримувач: payee.trim(),
-        }
-      : { Картка: pan.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ') }
-    const req = st.createRequest(
-      isIban ? 'IBAN_P2P' : 'CARD_P2P',
-      isIban ? 'Переказ на IBAN' : 'Переказ на картку',
-      num,
-      details,
-      fee || undefined,
-    )
-    haptic('success')
-    setDone(req)
+  const submit = async () => {
+    try {
+      const req = await st.createIbanRequest({
+        method,
+        iban: isIban ? iban.replace(/\s/g, '').toUpperCase() : undefined,
+        tin: isIban ? tin : undefined,
+        payeeName: isIban ? payee.trim() : undefined,
+        pan: isIban ? undefined : pan,
+        amountUah: num,
+        feeUahe: fee || undefined,
+      })
+      haptic('success')
+      setDone(req)
+    } catch (e) {
+      haptic('error')
+      showError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   return (
@@ -294,6 +297,31 @@ export function BillScan() {
   const amountOk = num >= LIMITS.billMin && num <= LIMITS.billMax
   const canSubmit = Boolean(fileName) && amountOk && num <= st.balance
 
+  // Фото рахунку живе як Telegram file_id — у API-режимі цей флоу веде в чат бота.
+  if (st.apiMode) {
+    return (
+      <div className="screen">
+        <BackHeader title="Оплата товарів/послуг" gradientWord="Оплата" />
+        <div className="panel" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <span className="icon-btn accent" style={{ pointerEvents: 'none' }}>
+            <Icon name="photo_camera" size={24} />
+          </span>
+          <div style={{ font: '400 13.5px/1.55 var(--font-ui)', color: 'var(--ink-70)' }}>
+            Для оплати рахунку потрібне фото — надішліть його в чаті бота, і мерчант сплатить
+            рахунок за вас.
+          </div>
+        </div>
+        <div className="spacer" />
+        <button
+          className="btn btn-primary"
+          onClick={() => openTgLink(`https://t.me/${BOT_USERNAME}`)}
+        >
+          Відкрити чат бота
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="screen">
       <BackHeader title="Оплата товарів/послуг" gradientWord="Оплата" />
@@ -351,12 +379,15 @@ export function BillScan() {
       <button
         className="btn btn-primary"
         disabled={!canSubmit}
-        onClick={() => {
-          const req = st.createRequest('BILL_SCAN', 'Оплата товарів/послуг', num, {
-            Рахунок: fileName ?? '—',
-          })
-          haptic('success')
-          setDone(req)
+        onClick={async () => {
+          try {
+            const req = await st.createBillRequest(fileName ?? '—', num)
+            haptic('success')
+            setDone(req)
+          } catch (e) {
+            haptic('error')
+            showError(e instanceof Error ? e.message : String(e))
+          }
         }}
       >
         Сплатити рахунок {num > 0 ? `на ${fmt(num)} грн` : ''}
@@ -408,12 +439,15 @@ export function OtherService({ code }: { code: string }) {
       <button
         className="btn btn-primary"
         disabled={!canSubmit}
-        onClick={() => {
-          const req = st.createRequest('OTHERS', svc.title, num, {
-            [svc.accountTitle]: account.trim(),
-          })
-          haptic('success')
-          setDone(req)
+        onClick={async () => {
+          try {
+            const req = await st.createOthersRequest(svc.code, svc.accountTitle, account.trim(), num)
+            haptic('success')
+            setDone(req)
+          } catch (e) {
+            haptic('error')
+            showError(e instanceof Error ? e.message : String(e))
+          }
         }}
       >
         Сплатити {num > 0 ? `${fmt(num)} грн` : ''}

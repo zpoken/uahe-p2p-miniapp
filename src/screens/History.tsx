@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store'
 import { CHAINS, TICKER, fmt, fmtDate } from '../data'
 import { EmptyState, KV, Sheet, StatusBadge } from '../components'
-import { haptic } from '../telegram'
+import { haptic, showError } from '../telegram'
 import { ReceiptRow, Segmented } from '../ds'
 import type { TileColor } from '../ds'
 import type { Operation, ServiceRequest } from '../types'
@@ -140,10 +140,14 @@ export default function History() {
               <div className="spacer" />
               <button
                 className="btn btn-danger"
-                onClick={() => {
-                  st.cancelRequest(openReq.id)
-                  haptic('error')
-                  setOpenReq(null)
+                onClick={async () => {
+                  try {
+                    await st.cancelRequest(openReq.id)
+                    haptic('error')
+                    setOpenReq(null)
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : String(e))
+                  }
                 }}
               >
                 Скасувати заявку

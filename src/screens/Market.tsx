@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { BackHeader, useNav } from '../nav'
 import { useStore } from '../store'
 import { CERT_BRANDS, TICKER, fmt, fmtDay } from '../data'
-import { EmptyState, GradTitle, KV, Sheet, useCopy } from '../components'
-import { haptic } from '../telegram'
+import { EmptyState, GradTitle, KV, Sheet, useCopy, useToast } from '../components'
+import { haptic, showError } from '../telegram'
 import { Barcode, Icon, ReceiptRow } from '../ds'
 
 function BrandLogo({ icon, color, size = 52 }: { icon: string; color: string; size?: number }) {
@@ -69,6 +69,7 @@ export function Market() {
 export function BrandScreen({ code }: { code: string }) {
   const st = useStore()
   const nav = useNav()
+  const toast = useToast()
   const brand = CERT_BRANDS.find((b) => b.code === code)
   const [nominal, setNominal] = useState<number | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -148,11 +149,18 @@ export function BrandScreen({ code }: { code: string }) {
           <div className="spacer" />
           <button
             className="btn btn-accent"
-            onClick={() => {
-              const cert = st.buyCert(brand.code, nominal)
-              haptic('success')
-              setConfirming(false)
-              if (cert) nav.replace({ name: 'cert', id: cert.id })
+            onClick={async () => {
+              try {
+                const cert = await st.buyCert(brand.code, nominal)
+                haptic('success')
+                setConfirming(false)
+                if (cert) nav.replace({ name: 'cert', id: cert.id })
+                else toast('Заявку створено — сертифікат зʼявиться після підтвердження')
+              } catch (e) {
+                haptic('error')
+                setConfirming(false)
+                showError(e instanceof Error ? e.message : String(e))
+              }
             }}
           >
             Підтвердити оплату

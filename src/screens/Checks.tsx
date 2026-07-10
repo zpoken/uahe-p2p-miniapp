@@ -3,7 +3,7 @@ import { BackHeader, useNav } from '../nav'
 import { useStore } from '../store'
 import { BOT_USERNAME, LIMITS, TICKER, fmt, fmtDate } from '../data'
 import { AmountInput, CopyBox, EmptyState, KV, StatusBadge } from '../components'
-import { haptic, openTgLink } from '../telegram'
+import { haptic, openTgLink, showError } from '../telegram'
 import { Icon, ReceiptRow, Segmented } from '../ds'
 
 const TTL_OPTIONS = [
@@ -101,10 +101,15 @@ export function CheckCreate() {
       <button
         className="btn btn-primary"
         disabled={!canSubmit}
-        onClick={() => {
-          const chk = st.createCheck(num, desc.trim(), Number(ttl))
-          haptic('success')
-          nav.replace({ name: 'check-detail', token: chk.token })
+        onClick={async () => {
+          try {
+            const chk = await st.createCheck(num, desc.trim(), Number(ttl))
+            haptic('success')
+            nav.replace({ name: 'check-detail', token: chk.token })
+          } catch (e) {
+            haptic('error')
+            showError(e instanceof Error ? e.message : String(e))
+          }
         }}
       >
         Створити чек {num > 0 ? `на ${fmt(num)} ${TICKER}` : ''}
@@ -170,10 +175,14 @@ export function CheckDetail({ token }: { token: string }) {
             </button>
             <button
               className="btn btn-danger"
-              onClick={() => {
-                st.cancelCheck(chk.token)
-                haptic('error')
-                nav.pop()
+              onClick={async () => {
+                try {
+                  await st.cancelCheck(chk.token)
+                  haptic('error')
+                  nav.pop()
+                } catch (e) {
+                  showError(e instanceof Error ? e.message : String(e))
+                }
               }}
             >
               Скасувати

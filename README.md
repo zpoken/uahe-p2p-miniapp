@@ -31,8 +31,17 @@ npm run build   # static build in dist/
 3. Open the bot in Telegram and tap the menu button — the app picks up the
    user's name/avatar and theme automatically via `window.Telegram.WebApp`.
 
-## Wiring the real backend
+## Connecting the real backend
 
-`src/store.tsx` is the only file that owns state. Replace its action bodies
-with `fetch` calls to the p2p-bot API (validate `initData` server-side), keep
-the same function signatures, and every screen keeps working unchanged.
+The app has two data modes (`src/api.ts` + `src/store.tsx`):
+
+- **Demo mode** (default): local data in localStorage, simulated merchant flows.
+- **API mode**: state comes from the p2p-bot `/miniapp/*` FastAPI (auth via
+  Telegram `initData` HMAC). Enable it either at build time
+  (`VITE_API_BASE=https://api.example.com npm run build`) or at runtime by
+  opening the app with `?api=https://api.example.com` (persisted to
+  localStorage; `?api=off` clears it).
+
+Backend side: see `MINIAPP_API.md` in the p2p-bot repo — it documents the
+`/miniapp` router, CORS settings, and the Cloudflare Tunnel runbook that
+exposes the bot's existing FastAPI (the bot itself keeps using polling).

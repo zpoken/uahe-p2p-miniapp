@@ -84,16 +84,17 @@ export function Profile() {
       <button
         className="btn btn-ghost"
         onClick={() => {
-          if (window.confirm('Скинути демо-дані до початкового стану?')) st.resetDemo()
+          if (st.apiMode) st.resetDemo()
+          else if (window.confirm('Скинути демо-дані до початкового стану?')) st.resetDemo()
         }}
       >
         <Icon name="restart_alt" size={19} />
-        Скинути демо-дані
+        {st.apiMode ? 'Оновити дані' : 'Скинути демо-дані'}
       </button>
       <div className="tagline" style={{ marginTop: 18 }}>
-        uahe p2p market _ демо-версія
+        {st.apiMode ? 'uahe p2p market' : 'uahe p2p market _ демо-версія'}
         <br />
-        дані зберігаються локально
+        {st.apiMode ? 'дані з вашого акаунта в боті' : 'дані зберігаються локально'}
       </div>
     </div>
   )

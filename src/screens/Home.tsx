@@ -134,6 +134,25 @@ export default function Home() {
         </button>
       </div>
 
+      {st.apiError && (
+        <div
+          className="panel"
+          style={{ marginBottom: 14, border: '1px solid rgba(229,72,77,.3)' }}
+        >
+          <div style={{ font: '400 13px/1.5 var(--font-ui)', color: 'var(--error)' }}>
+            Не вдалося зʼєднатися з сервером: {st.apiError}
+          </div>
+          <div className="spacer" style={{ height: 10 }} />
+          <button
+            className="btn btn-secondary"
+            style={{ padding: '10px 16px' }}
+            onClick={() => st.resetDemo()}
+          >
+            Спробувати ще раз
+          </button>
+        </div>
+      )}
+
       {/* balance hero */}
       <div className="panel hero">
         <WaveArt style={{ top: -6, right: -20, width: 260, height: 110 }} />

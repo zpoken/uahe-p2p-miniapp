@@ -64,20 +64,24 @@ export default function Deposit() {
         </div>
       </div>
 
-      <div className="spacer" />
-      <button
-        className="btn btn-ghost"
-        onClick={() => {
-          st.simulateDeposit(chain.code, chain.tokens[0], 1000)
-          haptic('success')
-          toast('Демо-депозит зараховано')
-        }}
-      >
-        Демо: імітувати депозит 1 000 {chain.tokens[0]}
-      </button>
-      <div className="footnote">
-        У демо-режимі депозит зараховується миттєво. У бойовому режимі адресу видає custody-провайдер.
-      </div>
+      {!st.apiMode && (
+        <>
+          <div className="spacer" />
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              st.simulateDeposit(chain.code, chain.tokens[0], 1000)
+              haptic('success')
+              toast('Демо-депозит зараховано')
+            }}
+          >
+            Демо: імітувати депозит 1 000 {chain.tokens[0]}
+          </button>
+          <div className="footnote">
+            У демо-режимі депозит зараховується миттєво. У бойовому режимі адресу видає custody-провайдер.
+          </div>
+        </>
+      )}
 
       {qr && (
         <Sheet title="Адреса поповнення" onClose={() => setQr(false)}>

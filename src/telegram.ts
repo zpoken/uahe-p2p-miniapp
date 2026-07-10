@@ -103,6 +103,18 @@ export function initTelegram(bg: string) {
   }
 }
 
+export function showError(msg: string) {
+  if (tg?.showAlert) {
+    try {
+      tg.showAlert(msg)
+      return
+    } catch {
+      /* older clients */
+    }
+  }
+  window.alert(msg)
+}
+
 export function openTgLink(url: string) {
   if (tg?.openTelegramLink) tg.openTelegramLink(url)
   else window.open(url, '_blank')

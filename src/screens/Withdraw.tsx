@@ -3,7 +3,7 @@ import { BackHeader, useNav } from '../nav'
 import { CHAINS, LIMITS, TICKER, fmt } from '../data'
 import { useStore } from '../store'
 import { KV, Sheet } from '../components'
-import { haptic } from '../telegram'
+import { haptic, showError } from '../telegram'
 import { NetworkCard, StatusTimeline } from '../ds'
 import type { ChainCode, WithdrawStatus } from '../types'
 
@@ -135,10 +135,15 @@ export default function Withdraw() {
       <button
         className="btn btn-primary"
         disabled={!canSubmit}
-        onClick={() => {
-          const w = st.createWithdraw(chainCode, to.trim(), num)
-          haptic('success')
-          setDone({ id: w.id })
+        onClick={async () => {
+          try {
+            const w = await st.createWithdraw(chainCode, to.trim(), num)
+            haptic('success')
+            setDone({ id: w.id })
+          } catch (e) {
+            haptic('error')
+            showError(e instanceof Error ? e.message : String(e))
+          }
         }}
       >
         Вивести {num > 0 ? `${fmt(num)} ${TICKER}` : ''}

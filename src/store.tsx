@@ -1,10 +1,13 @@
-// Demo data store. Mirrors the bot's ledger semantics (holds → capture/release)
-// and persists to localStorage. All mutations go through action functions so the
-// layer can later be swapped for real API calls against the p2p-bot backend.
+// App state. Two modes:
+//  - API mode (apiMode=true): state is loaded from the p2p-bot /miniapp API and
+//    every action calls the backend, then refreshes. Enabled by VITE_API_BASE
+//    or a ?api=https://… override (see src/api.ts).
+//  - Demo mode: local data persisted to localStorage, with simulated merchant
+//    behavior (holds → capture) mirroring the bot's ledger semantics.
 
 /* eslint-disable react-refresh/only-export-components */
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   Check,
@@ -14,8 +17,11 @@ import type {
   RequestKind,
   ServiceRequest,
   WithdrawRequest,
+  WithdrawStatus,
 } from './types'
-import { CERT_BRANDS, CHAINS, LIMITS } from './data'
+import { CERT_BRANDS, CHAINS, LIMITS, OPERATORS } from './data'
+import { api, apiMode } from './api'
+import type { ApiOwnedCert } from './api'
 
 // v2: design-system migration renamed cert `emoji` → Material icon names
 const LS_KEY = 'uahe_miniapp_v2'
@@ -32,18 +38,39 @@ export interface State {
   refInvited: number
   refPaying: number
   nextReqId: number
+  apiReady: boolean
+  apiError: string | null
 }
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase()
 }
 
+function emptyState(): State {
+  return {
+    balance: 0,
+    hold: 0,
+    ops: [],
+    checks: [],
+    requests: [],
+    certs: [],
+    withdrawals: [],
+    refEarned: 0,
+    refInvited: 0,
+    refPaying: 0,
+    nextReqId: 0,
+    apiReady: false,
+    apiError: null,
+  }
+}
+
 function seed(): State {
   const now = Date.now()
   const h = 3600_000
   return {
+    ...emptyState(),
+    apiReady: true,
     balance: 12480.5,
-    hold: 0,
     ops: [
       {
         id: uid(),
@@ -56,7 +83,7 @@ function seed(): State {
       {
         id: uid(),
         kind: 'CAPTURE',
-        title: 'Оплата заявки #10241 · Поповнення мобільного',
+        title: 'Оплата заявки №10241 · Поповнення мобільного',
         amount: -450,
         createdAt: now - 20 * h,
       },
@@ -83,7 +110,6 @@ function seed(): State {
         createdAt: now - 1 * h,
       },
     ],
-    checks: [],
     requests: [
       {
         id: 10241,
@@ -109,7 +135,6 @@ function seed(): State {
         boughtAt: now - 3 * h,
       },
     ],
-    withdrawals: [],
     refEarned: 184.2,
     refInvited: 7,
     refPaying: 3,
@@ -121,27 +146,23 @@ function load(): State {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return seed()
-    const st = JSON.parse(raw) as State
+    const st = { ...emptyState(), ...(JSON.parse(raw) as Partial<State>), apiReady: true }
     // Finalize demo states that were mid-flight when the app closed.
     const now = Date.now()
     let { balance, hold } = st
     for (const r of st.requests) {
       if ((r.status === 'PENDING' || r.status === 'ACCEPTED') && now - r.createdAt > 60_000) {
         const total = r.amountUah + (r.feeUahe ?? 0)
-        if (r.status === 'PENDING') {
-          balance -= total
-        } else {
-          hold -= total
-        }
+        if (r.status === 'PENDING') balance -= total
+        else hold -= total
         r.status = 'CONFIRMED'
         st.ops.unshift({
           id: uid(),
           kind: 'CAPTURE',
-          title: `Оплата заявки #${r.id} · ${r.title}`,
+          title: `Оплата заявки №${r.id} · ${r.title}`,
           amount: -total,
           createdAt: now,
         })
-        if (r.status === 'CONFIRMED' && r.kind !== 'GIFT_CERT') hold = Math.max(0, hold)
       }
     }
     for (const w of st.withdrawals) {
@@ -159,31 +180,76 @@ function load(): State {
   }
 }
 
+// ---------- API response mapping ----------
+
+const OP_TITLES: Record<string, string> = {
+  DEPOSIT: 'Поповнення',
+  WITHDRAWAL: 'Вивід коштів',
+  TRANSFER: 'Переказ',
+  HOLD: 'Блокування коштів',
+  CAPTURE: 'Оплата заявки',
+  RELEASE: 'Повернення коштів',
+}
+
+function ts(s: string | null): number {
+  return s ? Date.parse(s) : Date.now()
+}
+
+function mapCert(c: ApiOwnedCert): OwnedCert {
+  const local = CERT_BRANDS.find((b) => b.code === c.brand_code)
+  return {
+    id: String(c.id ?? c.pin),
+    brandCode: c.brand_code,
+    brandTitle: c.brand_title,
+    icon: local?.icon ?? 'redeem',
+    color: local?.color ?? '#3dba58',
+    nominalUah: c.nominal_uah,
+    priceUahe: c.price_uah,
+    pin: c.pin,
+    activationKeyName: c.activation_key_name ?? undefined,
+    activationKeyValue: c.activation_key_value ?? undefined,
+    expiresAt: c.expires_at ? Date.parse(c.expires_at) : Date.now() + 365 * 24 * 3600_000,
+    boughtAt: c.bought_at ? Date.parse(c.bought_at) : Date.now(),
+  }
+}
+
 interface Actions {
+  apiMode: boolean
+  refresh: () => Promise<void>
   simulateDeposit: (chain: ChainCode, token: string, amount: number) => void
-  createWithdraw: (chain: ChainCode, to: string, amount: number) => WithdrawRequest
-  createCheck: (amount: number, description: string, ttlHours: number) => Check
-  cancelCheck: (token: string) => void
-  createRequest: (
-    kind: RequestKind,
-    title: string,
+  createWithdraw: (chain: ChainCode, to: string, amount: number) => Promise<WithdrawRequest>
+  createCheck: (amount: number, description: string, ttlHours: number) => Promise<Check>
+  cancelCheck: (token: string) => Promise<void>
+  createMobileRequest: (operator: string, phone10: string, amountUah: number) => Promise<ServiceRequest>
+  createIbanRequest: (p: {
+    method: 'IBAN' | 'CARD'
+    iban?: string
+    tin?: string
+    payeeName?: string
+    pan?: string
+    amountUah: number
+    feeUahe?: number
+  }) => Promise<ServiceRequest>
+  createBillRequest: (fileName: string, amountUah: number) => Promise<ServiceRequest>
+  createOthersRequest: (
+    operatorCode: string,
+    accountTitle: string,
+    account: string,
     amountUah: number,
-    details: Record<string, string>,
-    feeUahe?: number,
-  ) => ServiceRequest
-  cancelRequest: (id: number) => void
-  buyCert: (brandCode: string, nominal: number) => OwnedCert | null
+  ) => Promise<ServiceRequest>
+  cancelRequest: (id: number) => Promise<void>
+  buyCert: (brandCode: string, nominal: number) => Promise<OwnedCert | null>
   resetDemo: () => void
 }
 
 const StoreCtx = createContext<(State & Actions) | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<State>(load)
+  const [state, setState] = useState<State>(() => (apiMode ? emptyState() : load()))
   const timers = useRef<number[]>([])
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(state))
+    if (!apiMode) localStorage.setItem(LS_KEY, JSON.stringify(state))
   }, [state])
 
   useEffect(() => {
@@ -200,8 +266,161 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ops: [{ ...op, id: uid(), createdAt: Date.now() }, ...st.ops],
   })
 
+  // ---------- API mode: load everything from the backend ----------
+
+  const refresh = useCallback(async () => {
+    if (!apiMode) return
+    const [me, ops, checks, requests, withdrawals, certs] = await Promise.all([
+      api.me(),
+      api.operations(),
+      api.checks(),
+      api.requests(),
+      api.withdrawals(),
+      api.certificates(),
+    ])
+    setState((st) => ({
+      ...st,
+      apiReady: true,
+      apiError: null,
+      balance: me.balance,
+      hold: me.hold,
+      refInvited: me.ref_invited,
+      ops: ops.map((o) => ({
+        id: String(o.id),
+        kind: o.kind as Operation['kind'],
+        title: `${OP_TITLES[o.kind] ?? o.kind}${o.ref ? ` · ${o.ref.slice(0, 18)}` : ''}`,
+        amount: o.amount,
+        createdAt: ts(o.created_at),
+        ref: o.ref ?? undefined,
+      })),
+      checks: checks.map((c) => ({
+        token: c.token,
+        amount: c.amount,
+        status: c.status as Check['status'],
+        description: c.description ?? undefined,
+        createdAt: ts(c.created_at),
+        expiresAt: c.expires_at ? Date.parse(c.expires_at) : undefined,
+      })),
+      requests: requests.map((r) => ({
+        id: r.id,
+        kind: r.kind as RequestKind,
+        title: r.title,
+        status: r.status as ServiceRequest['status'],
+        amountUah: r.amount_uah,
+        details: r.details,
+        declineReason: r.decline_reason ?? undefined,
+        createdAt: ts(r.created_at),
+      })),
+      withdrawals: withdrawals.map((w) => ({
+        id: String(w.id),
+        chain: w.chain_code as ChainCode,
+        to: w.to,
+        amount: w.amount,
+        fee: w.fee,
+        status: w.status as WithdrawStatus,
+        createdAt: ts(w.created_at),
+        txHash: w.tx_hash ?? undefined,
+      })),
+      certs: certs.map(mapCert),
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (!apiMode) return
+    refresh().catch((e) =>
+      setState((st) => ({ ...st, apiReady: true, apiError: String(e?.message ?? e) })),
+    )
+  }, [refresh])
+
+  // ---------- demo helpers (unchanged behavior) ----------
+
+  const demoRequestLifecycle = (req: ServiceRequest, total: number) => {
+    later(6000, () =>
+      setState((st) => {
+        const cur = st.requests.find((r) => r.id === req.id)
+        if (!cur || cur.status !== 'PENDING') return st
+        return pushOp(
+          {
+            ...st,
+            balance: st.balance - total,
+            hold: st.hold + total,
+            requests: st.requests.map((r) =>
+              r.id === req.id ? { ...r, status: 'ACCEPTED' as const } : r,
+            ),
+          },
+          { kind: 'HOLD', title: `Заявка №${req.id} прийнята — кошти заблоковано`, amount: -total },
+        )
+      }),
+    )
+    later(15000, () =>
+      setState((st) => {
+        const cur = st.requests.find((r) => r.id === req.id)
+        if (!cur || cur.status !== 'ACCEPTED') return st
+        return pushOp(
+          {
+            ...st,
+            hold: Math.max(0, st.hold - total),
+            requests: st.requests.map((r) =>
+              r.id === req.id ? { ...r, status: 'CONFIRMED' as const } : r,
+            ),
+          },
+          { kind: 'CAPTURE', title: `Оплата заявки №${req.id} · ${req.title}`, amount: 0 },
+        )
+      }),
+    )
+  }
+
+  const demoCreateRequest = (
+    kind: RequestKind,
+    title: string,
+    amountUah: number,
+    details: Record<string, string>,
+    feeUahe?: number,
+  ): ServiceRequest => {
+    const req: ServiceRequest = {
+      id: 0,
+      kind,
+      title,
+      status: 'PENDING',
+      amountUah,
+      feeUahe,
+      details,
+      createdAt: Date.now(),
+    }
+    setState((st) => {
+      req.id = st.nextReqId
+      return { ...st, nextReqId: st.nextReqId + 1, requests: [req, ...st.requests] }
+    })
+    demoRequestLifecycle(req, amountUah + (feeUahe ?? 0))
+    return req
+  }
+
+  const apiRequestOf = (
+    id: number,
+    kind: RequestKind,
+    title: string,
+    amountUah: number,
+    details: Record<string, string>,
+    feeUahe?: number,
+  ): ServiceRequest => ({
+    id,
+    kind,
+    title,
+    status: 'PENDING',
+    amountUah,
+    feeUahe,
+    details,
+    createdAt: Date.now(),
+  })
+
+  // ---------- actions ----------
+
   const actions: Actions = {
+    apiMode,
+    refresh,
+
     simulateDeposit(chain, token, amount) {
+      if (apiMode) return
       const chainTitle = CHAINS.find((c) => c.code === chain)?.title ?? chain
       const credited = token === 'UAHe' ? amount : Math.round(amount * 41.65 * 100) / 100
       setState((st) =>
@@ -217,8 +436,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       )
     },
 
-    createWithdraw(chain, to, amount) {
+    async createWithdraw(chain, to, amount) {
       const fee = CHAINS.find((c) => c.code === chain)?.withdrawFeeFlat ?? 0
+      if (apiMode) {
+        const r = await api.createWithdraw(chain, to, amount)
+        const wd: WithdrawRequest = {
+          id: String(r.id),
+          chain,
+          to,
+          amount,
+          fee,
+          status: r.status as WithdrawStatus,
+          createdAt: Date.now(),
+        }
+        setState((st) => ({ ...st, withdrawals: [wd, ...st.withdrawals] }))
+        refresh().catch(() => {})
+        return wd
+      }
       const wd: WithdrawRequest = {
         id: uid(),
         chain,
@@ -230,11 +464,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setState((st) =>
         pushOp(
-          {
-            ...st,
-            balance: st.balance - amount - fee,
-            withdrawals: [wd, ...st.withdrawals],
-          },
+          { ...st, balance: st.balance - amount - fee, withdrawals: [wd, ...st.withdrawals] },
           {
             kind: 'WITHDRAWAL',
             title: `Вивід · ${CHAINS.find((c) => c.code === chain)?.title ?? chain}`,
@@ -264,7 +494,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return wd
     },
 
-    createCheck(amount, description, ttlHours) {
+    async createCheck(amount, description, ttlHours) {
+      if (apiMode) {
+        const r = await api.createCheck(amount, description, ttlHours)
+        const chk: Check = {
+          token: r.token,
+          amount,
+          status: 'CREATED',
+          description: description || undefined,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + ttlHours * 3600_000,
+        }
+        setState((st) => ({ ...st, checks: [chk, ...st.checks] }))
+        refresh().catch(() => {})
+        return chk
+      }
       const chk: Check = {
         token: `chk_${uid()}${uid().slice(0, 4)}`,
         amount,
@@ -282,7 +526,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return chk
     },
 
-    cancelCheck(token) {
+    async cancelCheck(token) {
+      if (apiMode) {
+        await api.cancelCheck(token)
+        setState((st) => ({
+          ...st,
+          checks: st.checks.map((c) => (c.token === token ? { ...c, status: 'CANCELED' } : c)),
+        }))
+        refresh().catch(() => {})
+        return
+      }
       setState((st) => {
         const chk = st.checks.find((c) => c.token === token)
         if (!chk || chk.status !== 'CREATED') return st
@@ -299,68 +552,74 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
     },
 
-    createRequest(kind, title, amountUah, details, feeUahe) {
-      const req: ServiceRequest = {
-        id: 0,
-        kind,
-        title,
-        status: 'PENDING',
-        amountUah,
-        feeUahe,
-        details,
-        createdAt: Date.now(),
+    async createMobileRequest(operator, phone10, amountUah) {
+      const details = {
+        Оператор: OPERATORS.find((o) => o.code === operator)?.title ?? operator,
+        Телефон: phone10.replace(/(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4'),
       }
-      setState((st) => {
-        req.id = st.nextReqId
-        return { ...st, nextReqId: st.nextReqId + 1, requests: [req, ...st.requests] }
-      })
-      const total = amountUah + (feeUahe ?? 0)
-      // Demo merchant: accepts (hold) then confirms (capture).
-      later(6000, () =>
-        setState((st) => {
-          const cur = st.requests.find((r) => r.id === req.id)
-          if (!cur || cur.status !== 'PENDING') return st
-          return pushOp(
-            {
-              ...st,
-              balance: st.balance - total,
-              hold: st.hold + total,
-              requests: st.requests.map((r) =>
-                r.id === req.id ? { ...r, status: 'ACCEPTED' as const } : r,
-              ),
-            },
-            {
-              kind: 'HOLD',
-              title: `Заявка #${req.id} прийнята — кошти заблоковано`,
-              amount: -total,
-            },
-          )
-        }),
-      )
-      later(15000, () =>
-        setState((st) => {
-          const cur = st.requests.find((r) => r.id === req.id)
-          if (!cur || cur.status !== 'ACCEPTED') return st
-          return pushOp(
-            {
-              ...st,
-              hold: Math.max(0, st.hold - total),
-              requests: st.requests.map((r) =>
-                r.id === req.id ? { ...r, status: 'CONFIRMED' as const } : r,
-              ),
-            },
-            {
-              kind: 'CAPTURE',
-              title: `Оплата заявки #${req.id} · ${title}`,
-              amount: 0,
-            },
-          )
-        }),
-      )
-      return req
+      if (apiMode) {
+        const r = await api.createMobile(operator, phone10, amountUah)
+        refresh().catch(() => {})
+        const req = apiRequestOf(r.id, 'MOBILE_TOPUP', 'Поповнення мобільного', amountUah, details)
+        setState((st) => ({ ...st, requests: [req, ...st.requests] }))
+        return req
+      }
+      return demoCreateRequest('MOBILE_TOPUP', 'Поповнення мобільного', amountUah, details)
     },
 
-    cancelRequest(id) {
+    async createIbanRequest(p) {
+      const isIban = p.method === 'IBAN'
+      const details: Record<string, string> = isIban
+        ? { IBAN: p.iban ?? '', 'РНОКПП (ІПН)': p.tin ?? '', Отримувач: p.payeeName ?? '' }
+        : { Картка: p.pan ?? '' }
+      const title = isIban ? 'Переказ на IBAN' : 'Переказ на картку'
+      if (apiMode) {
+        const r = await api.createIban({
+          payment_method: p.method,
+          iban: p.iban,
+          card_pan: p.pan?.replace(/\s/g, ''),
+          payee_tin: p.tin,
+          payee_name: p.payeeName,
+          amount_uah: p.amountUah,
+        })
+        refresh().catch(() => {})
+        const req = apiRequestOf(r.id, isIban ? 'IBAN_P2P' : 'CARD_P2P', title, p.amountUah, details, p.feeUahe)
+        setState((st) => ({ ...st, requests: [req, ...st.requests] }))
+        return req
+      }
+      return demoCreateRequest(isIban ? 'IBAN_P2P' : 'CARD_P2P', title, p.amountUah, details, p.feeUahe)
+    },
+
+    async createBillRequest(fileName, amountUah) {
+      if (apiMode) {
+        throw new Error('Оплата рахунку за фото доступна в чаті бота — потрібне фото рахунку.')
+      }
+      return demoCreateRequest('BILL_SCAN', 'Оплата товарів/послуг', amountUah, { Рахунок: fileName })
+    },
+
+    async createOthersRequest(operatorCode, accountTitle, account, amountUah) {
+      const svcTitle = operatorCode === 'PETROLCARD' ? 'Поповнити PetrolCard' : 'Післяоплата НоваПошта'
+      const details = { [accountTitle]: account }
+      if (apiMode) {
+        const r = await api.createOthers(operatorCode, account, amountUah)
+        refresh().catch(() => {})
+        const req = apiRequestOf(r.id, 'OTHERS', svcTitle, amountUah, details)
+        setState((st) => ({ ...st, requests: [req, ...st.requests] }))
+        return req
+      }
+      return demoCreateRequest('OTHERS', svcTitle, amountUah, details)
+    },
+
+    async cancelRequest(id) {
+      if (apiMode) {
+        await api.cancelRequest(id)
+        setState((st) => ({
+          ...st,
+          requests: st.requests.map((r) => (r.id === id ? { ...r, status: 'CANCELED' } : r)),
+        }))
+        refresh().catch(() => {})
+        return
+      }
       setState((st) => {
         const cur = st.requests.find((r) => r.id === id)
         if (!cur || cur.status !== 'PENDING') return st
@@ -373,7 +632,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
     },
 
-    buyCert(brandCode, nominal) {
+    async buyCert(brandCode, nominal) {
+      if (apiMode) {
+        const r = await api.purchaseCert(brandCode, nominal)
+        if (!r.certificate) {
+          // MANUAL_CONFIRM flow: заявка створена, сертифікат прийде після підтвердження
+          refresh().catch(() => {})
+          return null
+        }
+        const cert = mapCert(r.certificate)
+        setState((st) => ({ ...st, certs: [cert, ...st.certs] }))
+        refresh().catch(() => {})
+        return cert
+      }
       const brand = CERT_BRANDS.find((b) => b.code === brandCode)
       if (!brand) return null
       const price = Math.round(nominal * (1 - brand.discountPct / 100) * 100) / 100
@@ -385,9 +656,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         color: brand.color,
         nominalUah: nominal,
         priceUahe: price,
-        pin: Array.from({ length: 4 }, () =>
-          String(Math.floor(1000 + Math.random() * 9000)),
-        ).join(' '),
+        pin: Array.from({ length: 4 }, () => String(Math.floor(1000 + Math.random() * 9000))).join(' '),
         activationKeyName: brand.activationKeyName,
         activationKeyValue: brand.activationKeyName
           ? String(Math.floor(100000 + Math.random() * 900000))
@@ -398,17 +667,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setState((st) =>
         pushOp(
           { ...st, balance: st.balance - price, certs: [cert, ...st.certs] },
-          {
-            kind: 'TRANSFER',
-            title: `Сертифікат ${brand.title} · ${nominal} грн`,
-            amount: -price,
-          },
+          { kind: 'TRANSFER', title: `Сертифікат ${brand.title} · ${nominal} грн`, amount: -price },
         ),
       )
       return cert
     },
 
     resetDemo() {
+      if (apiMode) {
+        refresh().catch(() => {})
+        return
+      }
       localStorage.removeItem(LS_KEY)
       setState(seed())
     },
